@@ -46,17 +46,23 @@ var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
 
 try
 {
-    // Test database connection (log to file only, no console output)
+    // Test the active database connection (log to file only, no console output)
     var dbService = serviceProvider.GetRequiredService<DatabaseService>();
+
+    var configured = dbService.GetDatabases();
+    logger.LogInformation("Configured databases: {Names}",
+        string.Join(", ", configured.Select(d => d.Display)));
+
+    var active = dbService.CurrentDatabase;
     var canConnect = await dbService.TestConnectionAsync();
 
     if (!canConnect)
     {
-        logger.LogCritical("Failed to connect to database. Please check your connection string in appsettings.json");
+        logger.LogCritical("Failed to connect to active database '{Name}'. Please check its connection string in appsettings.json", active.Name);
         Environment.Exit(1);
     }
 
-    logger.LogInformation("Database connection successful");
+    logger.LogInformation("Database connection successful (active: {Name})", active.Name);
 
     // Start MCP server
     var server = serviceProvider.GetRequiredService<McpServer>();

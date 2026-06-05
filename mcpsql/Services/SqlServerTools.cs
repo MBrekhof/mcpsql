@@ -27,6 +27,34 @@ public class SqlServerTools
         {
             new McpTool
             {
+                Name = "list_databases",
+                Description = "List all configured databases that can be connected to, and indicate which one is currently active. Use this to discover available connections before switching with use_database.",
+                InputSchema = new ToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, PropertySchema>()
+                }
+            },
+            new McpTool
+            {
+                Name = "use_database",
+                Description = "Switch the active database connection. All subsequent tool calls (queries, table listings, etc.) run against the selected database until changed again. Use list_databases to see valid names.",
+                InputSchema = new ToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, PropertySchema>
+                    {
+                        ["name"] = new PropertySchema
+                        {
+                            Type = "string",
+                            Description = "The configured database name to switch to (as shown by list_databases) (required)"
+                        }
+                    },
+                    Required = new List<string> { "name" }
+                }
+            },
+            new McpTool
+            {
                 Name = "get_database_info",
                 Description = "Get general information about the SQL Server database including server version, schemas, and object counts",
                 InputSchema = new ToolInputSchema
@@ -247,6 +275,8 @@ public class SqlServerTools
 
             var result = toolName switch
             {
+                "list_databases" => ListDatabases(),
+                "use_database" => UseDatabase(arguments),
                 "get_database_info" => await GetDatabaseInfoAsync(),
                 "list_tables" => await ListTablesAsync(arguments),
                 "list_views" => await ListViewsAsync(arguments),
@@ -258,6 +288,13 @@ public class SqlServerTools
                 "get_foreign_keys" => await GetForeignKeysAsync(arguments),
                 _ => throw new ArgumentException($"Unknown tool: {toolName}")
             };
+
+            // Tag data results with the active database so it's always clear which one was used.
+            // list_databases / use_database already name the database in their own output.
+            if (toolName != "list_databases" && toolName != "use_database")
+            {
+                PrefixWithActiveDatabase(result);
+            }
 
             return result;
         }
@@ -276,6 +313,85 @@ public class SqlServerTools
                 },
                 IsError = true
             };
+        }
+    }
+
+    private ToolCallResult ListDatabases()
+    {
+        var databases = _databaseService.GetDatabases();
+        var current = _databaseService.CurrentDatabase;
+
+        var text = $"Configured databases ({databases.Count}):\n\n";
+        text += string.Join("\n", databases.Select(d =>
+        {
+            var marker = string.Equals(d.Name, current.Name, StringComparison.OrdinalIgnoreCase) ? "→ " : "  ";
+            var active = string.Equals(d.Name, current.Name, StringComparison.OrdinalIgnoreCase) ? "  [ACTIVE]" : "";
+            return $"{marker}{d.Name} ({d.Database} on {d.Server}){active}";
+        }));
+        text += "\n\nUse use_database(name) to switch the active connection.";
+
+        return new ToolCallResult
+        {
+            Content = new List<ContentItem>
+            {
+                new ContentItem { Type = "text", Text = text }
+            }
+        };
+    }
+
+    private ToolCallResult UseDatabase(Dictionary<string, object>? arguments)
+    {
+        var name = GetRequiredArgument<string>(arguments, "name");
+
+        var info = _databaseService.SetCurrentDatabase(name);
+        if (info == null)
+        {
+            var available = string.Join(", ", _databaseService.GetDatabases().Select(d => d.Name));
+            return new ToolCallResult
+            {
+                Content = new List<ContentItem>
+                {
+                    new ContentItem
+                    {
+                        Type = "text",
+                        Text = $"Unknown database '{name}'. Available: {available}"
+                    }
+                },
+                IsError = true
+            };
+        }
+
+        return new ToolCallResult
+        {
+            Content = new List<ContentItem>
+            {
+                new ContentItem
+                {
+                    Type = "text",
+                    Text = $"Active database is now: {info.Name} ({info.Database} on {info.Server})"
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// Prepends a [database] tag to the first text item of a result so the
+    /// caller always sees which database the data came from.
+    /// </summary>
+    private void PrefixWithActiveDatabase(ToolCallResult result)
+    {
+        if (result.IsError == true)
+        {
+            return;
+        }
+
+        var tag = $"[{_databaseService.CurrentDatabase.Name}] ";
+        var firstText = result.Content.FirstOrDefault(c =>
+            string.Equals(c.Type, "text", StringComparison.OrdinalIgnoreCase));
+
+        if (firstText != null)
+        {
+            firstText.Text = tag + firstText.Text;
         }
     }
 

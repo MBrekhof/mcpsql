@@ -1,6 +1,7 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using SqlServerMcpServer.Protocol;
 using SqlServerMcpServer.Services;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -11,6 +12,9 @@ namespace SqlServerMcpServer;
 /// </summary>
 public class McpServer
 {
+    private const string DatabaseInfoResourceUri = "database://info";
+    private const string DatabaseObjectResourceTemplate = "database://schema/{schema}/{object_name}";
+
     private readonly SqlServerTools _tools;
     private readonly ILogger<McpServer> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -61,10 +65,13 @@ public class McpServer
                     }
 
                     var response = await HandleRequestAsync(request);
-                    var responseJson = JsonSerializer.Serialize(response, _jsonOptions);
+                    if (response != null)
+                    {
+                        var responseJson = JsonSerializer.Serialize(response, _jsonOptions);
 
-                    _logger.LogDebug("Sending: {Response}", responseJson);
-                    await writer.WriteLineAsync(responseJson);
+                        _logger.LogDebug("Sending: {Response}", responseJson);
+                        await writer.WriteLineAsync(responseJson);
+                    }
                 }
                 catch (JsonException ex)
                 {
@@ -87,31 +94,39 @@ public class McpServer
         _logger.LogInformation("MCP Server stopped");
     }
 
-    private async Task<JsonRpcResponse> HandleRequestAsync(JsonRpcRequest request)
+    private async Task<JsonRpcResponse?> HandleRequestAsync(JsonRpcRequest request)
     {
         try
         {
             return request.Method switch
             {
                 "initialize" => await HandleInitializeAsync(request),
-                "initialized" => await HandleInitializedNotification(request),
+                "initialized" => await HandleInitializedNotificationAsync(request),
+                "notifications/initialized" => await HandleInitializedNotificationAsync(request),
                 "tools/list" => HandleToolsList(request),
                 "tools/call" => await HandleToolsCallAsync(request),
+                "resources/list" => HandleResourcesList(request),
+                "resources/templates/list" => HandleResourceTemplatesList(request),
+                "resources/read" => await HandleResourcesReadAsync(request),
                 "ping" => HandlePing(request),
-                _ => CreateErrorResponse(request.Id, JsonRpcErrorCodes.MethodNotFound, $"Method not found: {request.Method}")
+                _ => request.Id == null
+                    ? null
+                    : CreateErrorResponse(request.Id, JsonRpcErrorCodes.MethodNotFound, $"Method not found: {request.Method}")
             };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error handling method: {Method}", request.Method);
-            return CreateErrorResponse(request.Id, JsonRpcErrorCodes.InternalError, ex.Message);
+            return request.Id == null
+                ? null
+                : CreateErrorResponse(request.Id, JsonRpcErrorCodes.InternalError, ex.Message);
         }
     }
 
     private async Task<JsonRpcResponse> HandleInitializeAsync(JsonRpcRequest request)
     {
         _logger.LogInformation("Handling initialize request");
-        
+
         try
         {
             var paramsJson = JsonSerializer.Serialize(request.Params, _jsonOptions);
@@ -127,7 +142,12 @@ public class McpServer
                 ProtocolVersion = "2024-11-05",
                 Capabilities = new ServerCapabilities
                 {
-                    Tools = new ToolsCapability { ListChanged = false }
+                    Tools = new ToolsCapability { ListChanged = false },
+                    Resources = new ResourcesCapability
+                    {
+                        Subscribe = false,
+                        ListChanged = false
+                    }
                 },
                 ServerInfo = new ServerInfo
                 {
@@ -151,12 +171,16 @@ public class McpServer
         }
     }
 
-    private Task<JsonRpcResponse> HandleInitializedNotification(JsonRpcRequest request)
+    private Task<JsonRpcResponse?> HandleInitializedNotificationAsync(JsonRpcRequest request)
     {
         _logger.LogInformation("Client initialized notification received");
 
-        // Notifications don't require a response, but we'll return an empty one
-        return Task.FromResult(new JsonRpcResponse
+        if (request.Id == null)
+        {
+            return Task.FromResult<JsonRpcResponse?>(null);
+        }
+
+        return Task.FromResult<JsonRpcResponse?>(new JsonRpcResponse
         {
             Id = request.Id,
             Result = new { }
@@ -201,7 +225,6 @@ public class McpServer
 
             _logger.LogInformation("Calling tool: {ToolName}", callParams.Name);
 
-            // Convert arguments - handle JsonElement properly
             Dictionary<string, object>? arguments = null;
             if (callParams.Arguments != null)
             {
@@ -224,6 +247,98 @@ public class McpServer
         {
             _logger.LogError(ex, "Error calling tool");
             return CreateErrorResponse(request.Id, JsonRpcErrorCodes.InternalError, $"Tool execution failed: {ex.Message}");
+        }
+    }
+
+    private JsonRpcResponse HandleResourcesList(JsonRpcRequest request)
+    {
+        if (!_isInitialized)
+        {
+            return CreateErrorResponse(request.Id, JsonRpcErrorCodes.InvalidRequest, "Server not initialized");
+        }
+
+        var result = new ResourcesListResult
+        {
+            Resources = new List<McpResource>
+            {
+                new McpResource
+                {
+                    Uri = DatabaseInfoResourceUri,
+                    Name = "Database Info",
+                    Description = "Basic metadata about the configured SQL Server database connection",
+                    MimeType = "text/plain"
+                }
+            }
+        };
+
+        return new JsonRpcResponse
+        {
+            Id = request.Id,
+            Result = result
+        };
+    }
+
+    private JsonRpcResponse HandleResourceTemplatesList(JsonRpcRequest request)
+    {
+        if (!_isInitialized)
+        {
+            return CreateErrorResponse(request.Id, JsonRpcErrorCodes.InvalidRequest, "Server not initialized");
+        }
+
+        var result = new ResourceTemplatesListResult
+        {
+            ResourceTemplates = new List<McpResourceTemplate>
+            {
+                new McpResourceTemplate
+                {
+                    UriTemplate = DatabaseObjectResourceTemplate,
+                    Name = "Database Object Schema",
+                    Description = "Detailed schema information for a table or view",
+                    MimeType = "text/plain"
+                }
+            }
+        };
+
+        return new JsonRpcResponse
+        {
+            Id = request.Id,
+            Result = result
+        };
+    }
+
+    private async Task<JsonRpcResponse> HandleResourcesReadAsync(JsonRpcRequest request)
+    {
+        if (!_isInitialized)
+        {
+            return CreateErrorResponse(request.Id, JsonRpcErrorCodes.InvalidRequest, "Server not initialized");
+        }
+
+        try
+        {
+            var paramsJson = JsonSerializer.Serialize(request.Params, _jsonOptions);
+            var readParams = JsonSerializer.Deserialize<ReadResourceParams>(paramsJson, _jsonOptions);
+
+            if (readParams == null || string.IsNullOrWhiteSpace(readParams.Uri))
+            {
+                return CreateErrorResponse(request.Id, JsonRpcErrorCodes.InvalidParams, "Resource URI is required");
+            }
+
+            var result = await ReadResourceAsync(readParams.Uri);
+
+            return new JsonRpcResponse
+            {
+                Id = request.Id,
+                Result = result
+            };
+        }
+        catch (ArgumentException ex)
+        {
+            return CreateErrorResponse(request.Id, JsonRpcErrorCodes.InvalidParams, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading resource");
+            return CreateErrorResponse(request.Id, JsonRpcErrorCodes.InternalError, $"Resource read failed: {ex.Message}");
         }
     }
 
@@ -254,5 +369,100 @@ public class McpServer
         var response = CreateErrorResponse(id, code, message);
         var json = JsonSerializer.Serialize(response, _jsonOptions);
         await writer.WriteLineAsync(json);
+    }
+
+    private async Task<ResourcesReadResult> ReadResourceAsync(string uri)
+    {
+        if (string.Equals(uri, DatabaseInfoResourceUri, StringComparison.OrdinalIgnoreCase))
+        {
+            var toolResult = await _tools.ExecuteToolAsync("get_database_info", null);
+            return CreateTextResourceResult(uri, ExtractToolText(toolResult));
+        }
+
+        if (TryParseSchemaResourceUri(uri, out var schema, out var objectName))
+        {
+            var toolResult = await _tools.ExecuteToolAsync("describe_table", new Dictionary<string, object>
+            {
+                ["schema"] = schema,
+                ["object_name"] = objectName
+            });
+
+            return CreateTextResourceResult(uri, ExtractToolText(toolResult));
+        }
+
+        throw new ArgumentException($"Resource not found: {uri}");
+    }
+
+    private static ResourcesReadResult CreateTextResourceResult(string uri, string text)
+    {
+        return new ResourcesReadResult
+        {
+            Contents = new List<ResourceContents>
+            {
+                new ResourceContents
+                {
+                    Uri = uri,
+                    MimeType = "text/plain",
+                    Text = text
+                }
+            }
+        };
+    }
+
+    private static string ExtractToolText(ToolCallResult toolResult)
+    {
+        var builder = new StringBuilder();
+
+        foreach (var item in toolResult.Content)
+        {
+            if (!string.Equals(item.Type, "text", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (builder.Length > 0)
+            {
+                builder.AppendLine();
+                builder.AppendLine();
+            }
+
+            builder.Append(item.Text);
+        }
+
+        var text = builder.ToString();
+        if (toolResult.IsError == true)
+        {
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(text) ? "Resource generation failed" : text);
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            throw new InvalidOperationException("No text content was returned for the requested resource");
+        }
+
+        return text;
+    }
+
+    private static bool TryParseSchemaResourceUri(string uri, out string schema, out string objectName)
+    {
+        const string prefix = "database://schema/";
+
+        schema = string.Empty;
+        objectName = string.Empty;
+
+        if (!uri.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var segments = uri[prefix.Length..].Split('/', 2, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length != 2)
+        {
+            return false;
+        }
+
+        schema = Uri.UnescapeDataString(segments[0]);
+        objectName = Uri.UnescapeDataString(segments[1]);
+        return !string.IsNullOrWhiteSpace(schema) && !string.IsNullOrWhiteSpace(objectName);
     }
 }

@@ -13,19 +13,99 @@ namespace SqlServerMcpServer.Services;
 /// </summary>
 public class DatabaseService
 {
-    private readonly string _connectionString;
+    private readonly Dictionary<string, DatabaseConnectionInfo> _databases;
+    private string _currentName;
     private readonly int _queryTimeoutSeconds;
     private readonly int _maxQueryRows;
     private readonly ILogger<DatabaseService> _logger;
 
     public DatabaseService(IConfiguration configuration, ILogger<DatabaseService> logger)
     {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found");
+        _logger = logger;
+
+        // Load every entry under "ConnectionStrings" as a switchable database.
+        _databases = new Dictionary<string, DatabaseConnectionInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in configuration.GetSection("ConnectionStrings").GetChildren())
+        {
+            if (string.IsNullOrWhiteSpace(entry.Value))
+            {
+                continue;
+            }
+
+            _databases[entry.Key] = BuildConnectionInfo(entry.Key, entry.Value);
+        }
+
+        if (_databases.Count == 0)
+        {
+            throw new InvalidOperationException("No connection strings found under 'ConnectionStrings' in appsettings.json");
+        }
+
+        // Pick the startup database: configured default, else "DefaultConnection", else the first entry.
+        var configuredDefault = configuration.GetValue<string>("McpServer:DefaultDatabase");
+        if (!string.IsNullOrWhiteSpace(configuredDefault) && _databases.ContainsKey(configuredDefault))
+        {
+            _currentName = _databases.Keys.First(k => string.Equals(k, configuredDefault, StringComparison.OrdinalIgnoreCase));
+        }
+        else if (_databases.ContainsKey("DefaultConnection"))
+        {
+            _currentName = "DefaultConnection";
+        }
+        else
+        {
+            _currentName = _databases.Keys.First();
+        }
 
         _queryTimeoutSeconds = configuration.GetValue<int>("McpServer:QueryTimeoutSeconds", 30);
         _maxQueryRows = configuration.GetValue<int>("McpServer:MaxQueryRows", 1000);
-        _logger = logger;
+
+        _logger.LogInformation("Configured databases: {Names}. Active: {Active}",
+            string.Join(", ", _databases.Keys), _currentName);
+    }
+
+    /// <summary>The connection string for the currently active database.</summary>
+    private string _connectionString => _databases[_currentName].ConnectionString;
+
+    /// <summary>The currently active database.</summary>
+    public DatabaseConnectionInfo CurrentDatabase => _databases[_currentName];
+
+    /// <summary>All configured databases, in declaration order.</summary>
+    public IReadOnlyList<DatabaseConnectionInfo> GetDatabases() => _databases.Values.ToList();
+
+    /// <summary>
+    /// Switches the active database. Returns the matching connection, or null if the name is unknown.
+    /// </summary>
+    public DatabaseConnectionInfo? SetCurrentDatabase(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || !_databases.TryGetValue(name, out var info))
+        {
+            return null;
+        }
+
+        _currentName = info.Name;
+        _logger.LogInformation("Active database switched to {Name}", info.Name);
+        return info;
+    }
+
+    private static DatabaseConnectionInfo BuildConnectionInfo(string name, string connectionString)
+    {
+        var info = new DatabaseConnectionInfo
+        {
+            Name = name,
+            ConnectionString = connectionString
+        };
+
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(connectionString);
+            info.Server = builder.DataSource;
+            info.Database = builder.InitialCatalog;
+        }
+        catch
+        {
+            // Leave Server/Database blank if the connection string can't be parsed for display.
+        }
+
+        return info;
     }
 
     /// <summary>
@@ -79,13 +159,13 @@ public class DatabaseService
             {
                 info.Schemas.Add(schemaReader.GetString(0));
             }
-        }
+        } // Close reader before next query
 
         // Get table and view counts
         var countCmd = new SqlCommand(@"
-            SELECT 
-                SUM(CASE WHEN TABLE_TYPE = 'BASE TABLE' THEN 1 ELSE 0 END) as TableCount,
-                SUM(CASE WHEN TABLE_TYPE = 'VIEW' THEN 1 ELSE 0 END) as ViewCount
+            SELECT
+                SUM(CASE WHEN TABLE_TYPE = 'BASE TABLE' THEN 1 ELSE 0 END) as [TableCount],
+                SUM(CASE WHEN TABLE_TYPE = 'VIEW' THEN 1 ELSE 0 END) as [ViewCount]
             FROM INFORMATION_SCHEMA.TABLES", connection);
 
         using (var countReader = await countCmd.ExecuteReaderAsync())
@@ -103,19 +183,16 @@ public class DatabaseService
     /// <summary>
     /// Lists all tables in the database
     /// </summary>
-    /// <summary>
-    /// Lists all tables in the database
-    /// </summary>
     public async Task<List<DatabaseObject>> ListTablesAsync(string? schemaFilter = null, string? namePattern = null)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         var sql = @"
-            SELECT 
+            SELECT
                 t.TABLE_SCHEMA,
                 t.TABLE_NAME,
-                ISNULL(p.rows, 0) as NrOfRows
+                ISNULL(p.rows, 0) as [RowCount]
             FROM INFORMATION_SCHEMA.TABLES t
             LEFT JOIN sys.tables st ON t.TABLE_NAME = st.name AND SCHEMA_NAME(st.schema_id) = t.TABLE_SCHEMA
             LEFT JOIN (
@@ -166,6 +243,7 @@ public class DatabaseService
 
         return tables;
     }
+
     /// <summary>
     /// Lists all views in the database
     /// </summary>
@@ -288,7 +366,7 @@ public class DatabaseService
     private async Task<List<ColumnInfo>> GetColumnsAsync(SqlConnection connection, string schema, string tableName)
     {
         var sql = @"
-            SELECT 
+            SELECT
                 c.COLUMN_NAME,
                 c.ORDINAL_POSITION,
                 c.DATA_TYPE,
@@ -297,9 +375,9 @@ public class DatabaseService
                 c.NUMERIC_SCALE,
                 c.IS_NULLABLE,
                 c.COLUMN_DEFAULT,
-                CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END as IsPrimaryKey,
-                CASE WHEN fk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END as IsForeignKey,
-                COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsIdentity') as IsIdentity
+                CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END as [IsPrimaryKey],
+                CASE WHEN fk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END as [IsForeignKey],
+                COLUMNPROPERTY(OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME), c.COLUMN_NAME, 'IsIdentity') as [IsIdentity]
             FROM INFORMATION_SCHEMA.COLUMNS c
             LEFT JOIN (
                 SELECT ku.TABLE_SCHEMA, ku.TABLE_NAME, ku.COLUMN_NAME
@@ -353,12 +431,12 @@ public class DatabaseService
     private async Task<List<IndexInfo>> GetIndexesAsync(SqlConnection connection, string schema, string tableName)
     {
         var sql = @"
-            SELECT 
-                i.name as IndexName,
-                i.type_desc as IndexType,
-                i.is_unique as IsUnique,
-                i.is_primary_key as IsPrimaryKey,
-                STRING_AGG(c.name, ', ') WITHIN GROUP (ORDER BY ic.key_ordinal) as Columns
+            SELECT
+                i.name as [IndexName],
+                i.type_desc as [IndexType],
+                i.is_unique as [IsUnique],
+                i.is_primary_key as [IsPrimaryKey],
+                STRING_AGG(c.name, ', ') WITHIN GROUP (ORDER BY ic.key_ordinal) as [Columns]
             FROM sys.indexes i
             JOIN sys.tables t ON i.object_id = t.object_id
             JOIN sys.schemas s ON t.schema_id = s.schema_id
@@ -393,14 +471,14 @@ public class DatabaseService
     private async Task<List<ForeignKeyInfo>> GetForeignKeysAsync(SqlConnection connection, string schema, string tableName)
     {
         var sql = @"
-            SELECT 
-                fk.name as ConstraintName,
-                c1.name as ForeignKeyColumn,
-                s2.name as ReferencedSchema,
-                t2.name as ReferencedTable,
-                c2.name as ReferencedColumn,
-                fk.update_referential_action_desc as UpdateRule,
-                fk.delete_referential_action_desc as DeleteRule
+            SELECT
+                fk.name as [ConstraintName],
+                c1.name as [ForeignKeyColumn],
+                s2.name as [ReferencedSchema],
+                t2.name as [ReferencedTable],
+                c2.name as [ReferencedColumn],
+                fk.update_referential_action_desc as [UpdateRule],
+                fk.delete_referential_action_desc as [DeleteRule]
             FROM sys.foreign_keys fk
             JOIN sys.tables t1 ON fk.parent_object_id = t1.object_id
             JOIN sys.schemas s1 ON t1.schema_id = s1.schema_id
@@ -530,40 +608,51 @@ public class DatabaseService
             }
 
             var stopwatch = Stopwatch.StartNew();
-            using var reader = await cmd.ExecuteReaderAsync();
-
             var result = new QueryResult();
 
-            // Get column names
-            for (int i = 0; i < reader.FieldCount; i++)
+            using (var reader = await cmd.ExecuteReaderAsync())
             {
-                result.ColumnNames.Add(reader.GetName(i));
-            }
-
-            // Read rows
-            while (await reader.ReadAsync() && result.RowCount < _maxQueryRows)
-            {
-                var row = new Dictionary<string, object?>();
+                // Get column names
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
-                    row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                    result.ColumnNames.Add(reader.GetName(i));
                 }
-                result.Rows.Add(row);
-                result.RowCount++;
-            }
 
-            result.WasTruncated = reader.HasRows;
+                // Read rows
+                while (await reader.ReadAsync() && result.RowCount < _maxQueryRows)
+                {
+                    var row = new Dictionary<string, object?>();
+                    for (int i = 0; i < reader.FieldCount; i++)
+                    {
+                        row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                    }
+                    result.Rows.Add(row);
+                    result.RowCount++;
+                }
+
+                // Check if there were more rows than we read (for truncation warning)
+                result.WasTruncated = await reader.ReadAsync();
+            } // Reader is disposed here
+
             stopwatch.Stop();
             result.ExecutionTimeMs = (int)stopwatch.ElapsedMilliseconds;
 
-            // Always rollback (read-only)
+            // Always rollback (read-only) - reader is now closed
             await transaction.RollbackAsync();
 
             return result;
         }
         catch
         {
-            await transaction.RollbackAsync();
+            // Reader is automatically disposed by using statement, safe to rollback
+            try
+            {
+                await transaction.RollbackAsync();
+            }
+            catch
+            {
+                // Ignore rollback errors in catch block
+            }
             throw;
         }
     }

@@ -69,12 +69,24 @@ public class ServerCapabilities
 {
     [JsonPropertyName("tools")]
     public ToolsCapability? Tools { get; set; }
+
+    [JsonPropertyName("resources")]
+    public ResourcesCapability? Resources { get; set; }
 }
 
 public class ToolsCapability
 {
     [JsonPropertyName("listChanged")]
     public bool ListChanged { get; set; }
+}
+
+public class ResourcesCapability
+{
+    [JsonPropertyName("subscribe")]
+    public bool? Subscribe { get; set; }
+
+    [JsonPropertyName("listChanged")]
+    public bool? ListChanged { get; set; }
 }
 
 /// <summary>
@@ -186,4 +198,70 @@ public class ContentItem
 
     [JsonPropertyName("text")]
     public string Text { get; set; } = string.Empty;
+}
+
+public class McpResource
+{
+    [JsonPropertyName("uri")]
+    public string Uri { get; set; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("mimeType")]
+    public string? MimeType { get; set; }
+}
+
+public class McpResourceTemplate
+{
+    [JsonPropertyName("uriTemplate")]
+    public string UriTemplate { get; set; } = string.Empty;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("mimeType")]
+    public string? MimeType { get; set; }
+}
+
+public class ResourcesListResult
+{
+    [JsonPropertyName("resources")]
+    public List<McpResource> Resources { get; set; } = new();
+}
+
+public class ResourceTemplatesListResult
+{
+    [JsonPropertyName("resourceTemplates")]
+    public List<McpResourceTemplate> ResourceTemplates { get; set; } = new();
+}
+
+public class ReadResourceParams
+{
+    [JsonPropertyName("uri")]
+    public string Uri { get; set; } = string.Empty;
+}
+
+public class ResourceContents
+{
+    [JsonPropertyName("uri")]
+    public string Uri { get; set; } = string.Empty;
+
+    [JsonPropertyName("mimeType")]
+    public string? MimeType { get; set; }
+
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = string.Empty;
+}
+
+public class ResourcesReadResult
+{
+    [JsonPropertyName("contents")]
+    public List<ResourceContents> Contents { get; set; } = new();
 }

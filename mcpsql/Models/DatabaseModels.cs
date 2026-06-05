@@ -83,6 +83,20 @@ public class DatabaseInfo
 }
 
 /// <summary>
+/// Represents a configured, switchable database connection
+/// </summary>
+public class DatabaseConnectionInfo
+{
+    public string Name { get; set; } = string.Empty;
+    public string Server { get; set; } = string.Empty;
+    public string Database { get; set; } = string.Empty;
+    public string ConnectionString { get; set; } = string.Empty;
+
+    /// <summary>Human-friendly label, e.g. "Labware8 (Labware8 on tst-sql-005)"</summary>
+    public string Display => $"{Name} ({Database} on {Server})";
+}
+
+/// <summary>
 /// Query execution result
 /// </summary>
 public class QueryResult
