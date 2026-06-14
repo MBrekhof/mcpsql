@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using SqlServerMcpServer.Protocol;
 using System.Text.Json;
 
@@ -11,11 +12,13 @@ public class SqlServerTools
 {
     private readonly DatabaseService _databaseService;
     private readonly ILogger<SqlServerTools> _logger;
+    private readonly int _maxCellWidth;
 
-    public SqlServerTools(DatabaseService databaseService, ILogger<SqlServerTools> logger)
+    public SqlServerTools(DatabaseService databaseService, ILogger<SqlServerTools> logger, IConfiguration configuration)
     {
         _databaseService = databaseService;
         _logger = logger;
+        _maxCellWidth = configuration.GetValue<int>("McpServer:MaxCellWidth", 1000);
     }
 
     /// <summary>
@@ -708,7 +711,7 @@ COLUMNS ({structure.Columns.Count}):
             foreach (var col in result.ColumnNames)
             {
                 var value = row.ContainsKey(col) ? row[col]?.ToString() ?? "NULL" : "NULL";
-                colWidths[col] = Math.Max(colWidths[col], Math.Min(value.Length, 50));
+                colWidths[col] = Math.Max(colWidths[col], Math.Min(value.Length, _maxCellWidth));
             }
         }
 
@@ -722,7 +725,7 @@ COLUMNS ({structure.Columns.Count}):
             var values = result.ColumnNames.Select(col =>
             {
                 var value = row.ContainsKey(col) ? row[col]?.ToString() ?? "NULL" : "NULL";
-                if (value.Length > 50) value = value.Substring(0, 47) + "...";
+                if (value.Length > _maxCellWidth) value = value.Substring(0, _maxCellWidth - 3) + "...";
                 return value.PadRight(colWidths[col]);
             });
             text += string.Join(" | ", values) + "\n";
