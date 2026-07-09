@@ -45,6 +45,7 @@ Copy `appsettings.example.json` to `appsettings.json` (gitignored). Shape:
 
 - Run `dotnet test` — `mcpsql.Tests` covers `QueryValidator`, the read-only security boundary. Add/extend tests when you touch validation or formatting logic.
 - Build-clean and green tests are **not** proof the server works end to end. After changes that affect runtime behavior, also run the server against a live SQL Server instance and exercise the affected tool(s) before claiming success.
+- Live smoke test: the server speaks newline-delimited JSON-RPC (no Content-Length framing) — pipe JSON lines (`initialize`, then `tools/call`) into the built exe; stdin EOF terminates it cleanly. If it exits code 1 with **no output**, the startup DB-connectivity check failed — see `logs/mcp-server-YYYYMMDD.log` created **next to the exe** (under `bin/...`), not the repo root.
 
 ## Git
 
