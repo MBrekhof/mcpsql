@@ -365,3 +365,6 @@ FodyWeavers.xsd
 appsettings.json
 appsettings.*.json
 !appsettings.example.json
+
+# Claude agent-local memory (never commit; see global memory policy)
+.claude/agent-memory/
