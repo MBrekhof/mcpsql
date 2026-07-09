@@ -2,6 +2,29 @@
 
 Latest first. Read this and `TODO.md` at the start of each session to catch up.
 
+## 2026-07-09 — Live-DB verification of MaxCellWidth
+
+**What was done:** verified the `MaxCellWidth` change end to end against a live SQL Server
+(local Docker container `xafrolechooser-sqlserver`, `localhost,1433`, catalog `master`), driving
+the server over stdio JSON-RPC (`initialize` + `tools/call` → `execute_query`):
+- No `MaxCellWidth` key in config → default 1000: `REPLICATE('x',200)` came back untruncated (200 chars).
+- `MaxCellWidth: 60` → cell truncated to exactly 60 chars ending in `...`.
+
+The "not verified against a live DB" caveat from 2026-06-15 is closed. A working local
+`mcpsql/appsettings.json` (gitignored) now points at the Docker instance for future testing.
+
+**State:** build clean, no code changes this session — docs only.
+
+## 2026-06-15 — Configurable display cell width
+
+**What changed:**
+- Replaced the hardcoded 50-char cell truncation in the query/preview table formatter with a configurable `McpServer:MaxCellWidth` setting (default **1000**). `SqlServerTools` now takes `IConfiguration`; key added to `appsettings.example.json`.
+- Shipped via PR #1, merged to `master` (fast-forward, `cf45b23`).
+
+**Why:** the 50-char cap was lossy to the MCP client (the LLM never saw full text-field values), so it wrote convoluted SUBSTRING-chunking queries to read long values. Bigger default kills that workaround.
+
+**State:** build clean. Not verified against a live DB (none on hand) — worth a quick check against wlncentral.
+
 ## 2026-06-06 — Repo setup: tests, docs, licensing
 
 **What changed:**

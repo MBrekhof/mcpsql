@@ -19,5 +19,6 @@ Working backlog for mcpsql. Newest priorities at the top.
 
 ## Done
 
+- [x] Make display cell width configurable (`McpServer:MaxCellWidth`, default 1000) — PR #1.
 - [x] Add xUnit test project (`mcpsql.Tests`) covering `QueryValidator` — 38 tests.
 - [x] Add README, LICENSE (MIT), and contributor guidance (CLAUDE.md).
