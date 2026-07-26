@@ -1,0 +1,28 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    # windows-latest, not ubuntu: mcpsql.csproj pins RuntimeIdentifier win-x64 with SelfContained.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - run: dotnet restore mcpsql.sln
+
+      - run: dotnet build mcpsql.sln --no-restore --configuration Release
+
+      # No live SQL Server here — the suite is pure unit tests over QueryValidator, the result
+      # formatter and the row-limit rewrite. Anything needing a database is a manual smoke test
+      # (see CLAUDE.md).
+      - run: dotnet test mcpsql.sln --no-build --configuration Release --verbosity normal
