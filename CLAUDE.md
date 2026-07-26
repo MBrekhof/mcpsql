@@ -33,7 +33,8 @@ A Model Context Protocol (MCP) server for SQL Server. It speaks JSON-RPC 2.0 ove
 
 Copy `appsettings.example.json` to `appsettings.json` (gitignored). Shape:
 - `ConnectionStrings` — dictionary of named connections (≥1 required).
-- `McpServer` — `DefaultDatabase`, `MaxQueryRows`, `DefaultPreviewRows`, `QueryTimeoutSeconds`, `EnableQueryLogging`.
+- `McpServer` — `DefaultDatabase`, `MaxQueryRows`, `MaxCellWidth`, `DefaultPreviewRows`, `QueryTimeoutSeconds`, `EnableQueryLogging`.
+- Per-connection timeout: a connection string carrying SQL Server's own `Command Timeout=N` keyword overrides `QueryTimeoutSeconds` for that connection only. The effective value is baked into the connection string by `DatabaseService.WithCommandTimeout`, so **don't set `cmd.CommandTimeout` on individual commands** — that reintroduces the bug where a per-connection override was silently stomped.
 
 ## Code style
 

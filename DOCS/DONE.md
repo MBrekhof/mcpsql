@@ -2,6 +2,25 @@
 
 Completed work, newest first. Items move here from `TODO.md` with a completion date.
 
+#### CFG-002: Per-connection query timeout overrides (ID: 528) — 2026-07-26
+
+No new config schema: SQL Server's own `Command Timeout=N` connection-string keyword is the override,
+and `McpServer:QueryTimeoutSeconds` stays the default for connections that don't set one.
+`DatabaseService.WithCommandTimeout` bakes the effective value into the connection string, so every
+command created on that connection inherits it.
+
+That also fixed a pre-existing gap: `QueryTimeoutSeconds` was only applied to 2 of the 13 command
+sites, so introspection tools (`list_tables`, `describe_table`, …) silently ran at ADO.NET's 30s
+default no matter what the setting said. The two explicit `cmd.CommandTimeout` assignments were
+removed — they would have stomped a per-connection override on exactly the paths that matter.
+
+Detection uses `ShouldSerialize("Command Timeout")`, not `ContainsKey` (true for every *known*
+keyword on a typed builder, which a test caught) and not a value comparison (30 is both a plausible
+override and ADO.NET's default).
+
+Verified live: the same 6.2s query succeeded on the 30s connection and returned "Execution Timeout
+Expired" on a `Command Timeout=1` connection, while a fast query on that same connection still ran.
+
 #### CI-001: Add GitHub Actions build + test workflow (ID: 526) — 2026-07-26
 
 `.github/workflows/build.yml` — restore, Release build, `dotnet test` on push and PR to `master`.

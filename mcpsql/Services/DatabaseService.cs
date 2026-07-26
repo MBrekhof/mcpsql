@@ -62,8 +62,32 @@ public class DatabaseService
             string.Join(", ", _databases.Keys), _currentName);
     }
 
-    /// <summary>The connection string for the currently active database.</summary>
-    private string _connectionString => _databases[_currentName].ConnectionString;
+    /// <summary>
+    /// The connection string for the currently active database, with the effective command timeout
+    /// baked in. Every SqlCommand created on the resulting connection inherits it, so introspection
+    /// queries honour the setting too — they used to silently run at ADO.NET's 30s default.
+    /// </summary>
+    private string _connectionString => WithCommandTimeout(_databases[_currentName].ConnectionString, _queryTimeoutSeconds);
+
+    /// <summary>
+    /// Applies <paramref name="defaultTimeoutSeconds"/> as the command timeout unless the connection
+    /// string sets its own "Command Timeout" — that per-connection value always wins.
+    /// </summary>
+    internal static string WithCommandTimeout(string connectionString, int defaultTimeoutSeconds)
+    {
+        var builder = new SqlConnectionStringBuilder(connectionString);
+
+        // ponytail: SqlClient already understands "Command Timeout", so a per-connection override
+        // needs no config schema of its own. ShouldSerialize, not ContainsKey (which is true for every
+        // *known* keyword) and not a value check (30 is both a plausible override and ADO.NET's
+        // default, so comparing values would stomp a deliberate 30).
+        if (!builder.ShouldSerialize("Command Timeout"))
+        {
+            builder.CommandTimeout = defaultTimeoutSeconds;
+        }
+
+        return builder.ConnectionString;
+    }
 
     /// <summary>The currently active database.</summary>
     public DatabaseConnectionInfo CurrentDatabase => _databases[_currentName];
@@ -309,7 +333,6 @@ public class DatabaseService
 
         var sql = $"SELECT COUNT(*) FROM {tableIdentifier}";
         using var cmd = new SqlCommand(sql, connection);
-        cmd.CommandTimeout = _queryTimeoutSeconds;
 
         var result = await cmd.ExecuteScalarAsync();
         return Convert.ToInt64(result);
@@ -613,8 +636,9 @@ public class DatabaseService
 
         try
         {
+            // No explicit CommandTimeout: it comes from the connection string, so a per-connection
+            // "Command Timeout" override isn't stomped here.
             using var cmd = new SqlCommand(sql, connection, transaction);
-            cmd.CommandTimeout = _queryTimeoutSeconds;
 
             if (parameters != null)
             {
