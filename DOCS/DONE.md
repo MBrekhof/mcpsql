@@ -2,6 +2,19 @@
 
 Completed work, newest first. Items move here from `TODO.md` with a completion date.
 
+#### ROW-001: max_rows is ignored for CTE (WITH) queries (ID: 1093) — 2026-07-26
+
+`ExecuteQueryInternalAsync` now enforces the caller's `maxRows` while reading, instead of relying on
+the TOP rewrite (which can only touch a leading SELECT) plus a `MaxQueryRows` backstop. Fixes every
+query shape without parsing SQL, per option (a) on the card.
+
+The cap check also moved ahead of `ReadAsync` in the loop condition. It used to consume the row that
+exceeded the cap and throw it away, which made the `WasTruncated` probe miss by exactly one row and
+suppressed the "Results truncated" notice.
+
+Verified live: a CTE with `max_rows: 2` returned 132 rows before, 2 after — and now correctly reports
+"Results truncated to 2 rows". Plain queries, DISTINCT and `preview_data` unchanged.
+
 #### TST-001: Cover SqlServerTools formatting and row-cap logic (ID: 524) — 2026-07-26
 
 17 new tests (55 total, all green). Added two seams so the pure logic is reachable from
