@@ -25,21 +25,6 @@ formatting tests are pure unit tests.
 
 ## P3: Low
 
-#### FMT-001: Escape hatch for long-text columns (ID: 726)
-
-Raised 2026-07-15 from the LimsBasic side: long-text columns (`SUBROUTINE.SOURCE_CODE`,
-`LIMS_LOG.MESSAGE`) came back truncated at ~50 chars, forcing `SUBSTRING` chunking. Suggested shapes:
-a `max_col_width` parameter on the query tools, and/or "write result to file" for payloads too big to
-inline.
-
-- a) Confirm the premise first — `McpServer:MaxCellWidth` already defaults to **1000**
-  (`SqlServerTools.cs:21`, shipped 2026-06-15). A 50-char cap in July means the MCP client was running
-  a stale published binary, not that the code truncates at 50. Re-check before building anything.
-- b) Out of scope here: routine-specific tools (`get_routine_source` etc.) — those live in
-  `LimsBasic.Mcp`.
-
-Related: [SEC-001] touches the same result-shaping path.
-
 #### SEC-001: Column-level allow/deny lists per connection (ID: 527)
 
 Optional per-connection column filtering, so a named connection can hide sensitive columns from
