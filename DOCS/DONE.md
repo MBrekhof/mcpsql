@@ -2,6 +2,20 @@
 
 Completed work, newest first. Items move here from `TODO.md` with a completion date.
 
+#### CI-001: Add GitHub Actions build + test workflow (ID: 526) — 2026-07-26
+
+`.github/workflows/build.yml` — restore, Release build, `dotnet test` on push and PR to `master`.
+Runs on `windows-latest` because `mcpsql.csproj` pins `RuntimeIdentifier win-x64` with
+`SelfContained`. No live SQL Server in CI; anything needing a database stays a manual smoke test.
+
+#### CFG-001: Add .editorconfig (ID: 525) — 2026-07-26
+
+Encodes the style the codebase already follows (4-space C#, tabs in MSBuild files, file-scoped
+namespaces, usings outside the namespace). Style rules sit at `suggestion` severity so the build
+stays warning-free — the three nullable diagnostics (CS8600/8602/8618) are the only ones raised to
+`warning`, since those are the ones that actually bite at runtime. Verified: Release build still
+reports 0 warnings.
+
 #### ROW-001: max_rows is ignored for CTE (WITH) queries (ID: 1093) — 2026-07-26
 
 `ExecuteQueryInternalAsync` now enforces the caller's `maxRows` while reading, instead of relying on

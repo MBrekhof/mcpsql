@@ -2,18 +2,6 @@
 
 Open work for mcpsql. Completed items move to `DOCS/DONE.md`.
 
-## P2: Medium
-
-#### CFG-001: Add .editorconfig (ID: 525)
-
-So `dotnet format` and the SDK analyzers give consistent style/nullability feedback instead of
-per-file drift.
-
-#### CI-001: Add GitHub Actions build + test workflow (ID: 526)
-
-`dotnet build` + `dotnet test` on push/PR to `master`. No live DB in CI — `QueryValidator` and
-formatting tests are pure unit tests.
-
 ## P3: Low
 
 #### SEC-001: Column-level allow/deny lists per connection (ID: 527)
