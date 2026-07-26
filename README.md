@@ -42,6 +42,14 @@ A read-only [Model Context Protocol](https://modelcontextprotocol.io) (MCP) serv
    }
    ```
 
+   `QueryTimeoutSeconds` is the default for every connection. To give one connection a different
+   timeout, put SQL Server's own `Command Timeout` keyword in its connection string — it wins over
+   the global setting:
+
+   ```json
+   "SlowReportingConnection": "Server=reports;Database=MyDb;Integrated Security=true;Command Timeout=180"
+   ```
+
 3. Build:
 
    ```sh

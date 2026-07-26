@@ -9,6 +9,3 @@ Open work for mcpsql. Completed items move to `DOCS/DONE.md`.
 Optional per-connection column filtering, so a named connection can hide sensitive columns from
 introspection and query results.
 
-#### CFG-002: Per-connection query timeout overrides (ID: 528)
-
-`McpServer:QueryTimeoutSeconds` is global today; allow a per-connection override for slow instances.
