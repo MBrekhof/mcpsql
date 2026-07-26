@@ -2,16 +2,22 @@
 
 Open work for mcpsql. Completed items move to `DOCS/DONE.md`.
 
-## P1: High
-
-#### TST-001: Cover SqlServerTools formatting and row-cap logic (ID: 524)
-
-Tests currently stop at `QueryValidator`. Extend `mcpsql.Tests` to the result-formatting path in
-`Services/SqlServerTools.cs` — cell truncation at `MaxCellWidth`, the `MaxQueryRows` row cap, and the
-`WasTruncated` notice (`SqlServerTools.cs:604`). Live smoke testing works now (see `CLAUDE.md`), so
-behaviour can be pinned against the local Docker SQL Server where a unit test is awkward.
-
 ## P2: Medium
+
+#### ROW-001: max_rows is ignored for CTE (WITH) queries (ID: 1093)
+
+`DatabaseService.ApplyRowLimit` only injects TOP into a query starting with SELECT, but
+`QueryValidator` also allows WITH — so a CTE query gets no TOP and the caller's `max_rows` is silently
+dropped. Confirmed live 2026-07-26: a CTE with `max_rows: 2` returned **132 rows**. Bounded by the
+reader loop's `MaxQueryRows` cap (default 1000), so it over-fetches rather than running away.
+
+Locked in by `RowLimitTests.ApplyRowLimit_DoesNotLimitCteQueries`, which currently asserts the broken
+behaviour — flip that test when fixing.
+
+- a) Preferred fix: cap the reader loop in `ExecuteQueryInternalAsync` at the caller's `maxRows`
+  instead of only `_maxQueryRows`. Fixes every query shape without parsing SQL.
+- b) Alternative: locate the final SELECT with ScriptDom. Correct, much heavier; regex can't do it
+  (nested CTEs, UNION, subqueries).
 
 #### CFG-001: Add .editorconfig (ID: 525)
 

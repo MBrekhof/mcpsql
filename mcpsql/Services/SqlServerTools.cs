@@ -582,7 +582,7 @@ COLUMNS ({structure.Columns.Count}):
         var result = await _databaseService.PreviewDataAsync(schema, objectName, topN, orderBy);
 
         var text = $"Preview of {schema}.{objectName} (showing {result.RowCount} row(s), executed in {result.ExecutionTimeMs}ms):\n\n";
-        text += FormatQueryResult(result);
+        text += FormatQueryResult(result, _maxCellWidth);
 
         return new ToolCallResult
         {
@@ -606,7 +606,7 @@ COLUMNS ({structure.Columns.Count}):
             text += $" - Results truncated to {maxRows} rows";
         }
         text += ":\n\n";
-        text += FormatQueryResult(result);
+        text += FormatQueryResult(result, _maxCellWidth);
 
         return new ToolCallResult
         {
@@ -690,8 +690,13 @@ COLUMNS ({structure.Columns.Count}):
         };
     }
 
-    private string FormatQueryResult(Models.QueryResult result)
+    internal static string FormatQueryResult(Models.QueryResult result, int maxCellWidth)
     {
+        // ponytail: the "..." suffix needs 3 characters of room, so anything below 4 makes the
+        // Substring below go negative and throws away the whole tool call. MaxCellWidth is
+        // operator-supplied and unvalidated; clamp here, where every caller routes through.
+        maxCellWidth = Math.Max(maxCellWidth, 4);
+
         if (result.Rows.Count == 0)
         {
             return "(No rows returned)";
@@ -711,7 +716,7 @@ COLUMNS ({structure.Columns.Count}):
             foreach (var col in result.ColumnNames)
             {
                 var value = row.ContainsKey(col) ? row[col]?.ToString() ?? "NULL" : "NULL";
-                colWidths[col] = Math.Max(colWidths[col], Math.Min(value.Length, _maxCellWidth));
+                colWidths[col] = Math.Max(colWidths[col], Math.Min(value.Length, maxCellWidth));
             }
         }
 
@@ -725,7 +730,7 @@ COLUMNS ({structure.Columns.Count}):
             var values = result.ColumnNames.Select(col =>
             {
                 var value = row.ContainsKey(col) ? row[col]?.ToString() ?? "NULL" : "NULL";
-                if (value.Length > _maxCellWidth) value = value.Substring(0, _maxCellWidth - 3) + "...";
+                if (value.Length > maxCellWidth) value = value.Substring(0, maxCellWidth - 3) + "...";
                 return value.PadRight(colWidths[col]);
             });
             text += string.Join(" | ", values) + "\n";
