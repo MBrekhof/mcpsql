@@ -577,7 +577,9 @@ public class DatabaseService
             maxRows = _maxQueryRows;
         }
 
-        return await ExecuteQueryInternalAsync(ApplyRowLimit(query, maxRows), null);
+        // maxRows is also enforced while reading: ApplyRowLimit can only add TOP to a leading SELECT,
+        // so query shapes it can't rewrite (CTEs) would otherwise ignore the caller's limit entirely.
+        return await ExecuteQueryInternalAsync(ApplyRowLimit(query, maxRows), null, maxRows);
     }
 
     /// <summary>
@@ -602,7 +604,7 @@ public class DatabaseService
         return modifiedQuery;
     }
 
-    private async Task<QueryResult> ExecuteQueryInternalAsync(string sql, Dictionary<string, object>? parameters)
+    private async Task<QueryResult> ExecuteQueryInternalAsync(string sql, Dictionary<string, object>? parameters, int? maxRows = null)
     {
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -633,8 +635,10 @@ public class DatabaseService
                     result.ColumnNames.Add(reader.GetName(i));
                 }
 
-                // Read rows
-                while (await reader.ReadAsync() && result.RowCount < _maxQueryRows)
+                // Read rows. Checking the cap first means the row that would exceed it is left in the
+                // reader, so the WasTruncated probe below sees it instead of silently eating it.
+                var rowCap = Math.Min(maxRows ?? _maxQueryRows, _maxQueryRows);
+                while (result.RowCount < rowCap && await reader.ReadAsync())
                 {
                     var row = new Dictionary<string, object?>();
                     for (int i = 0; i < reader.FieldCount; i++)

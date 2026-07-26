@@ -41,11 +41,11 @@ public class RowLimitTests
     }
 
     [Fact]
-    public void ApplyRowLimit_DoesNotLimitCteQueries()
+    public void ApplyRowLimit_DoesNotRewriteCteQueries()
     {
-        // Documents a known gap: QueryValidator allows WITH, but the TOP rewrite only matches a
-        // leading SELECT, so max_rows is not applied to CTE queries. The reader loop still caps at
-        // McpServer:MaxQueryRows, so this bounds the blast radius rather than removing it.
+        // The TOP rewrite only matches a leading SELECT, and QueryValidator also allows WITH. That
+        // is fine as long as nobody treats this rewrite as the only row cap: ExecuteQueryInternalAsync
+        // enforces maxRows while reading, which is what actually limits CTE queries (ROW-001).
         const string cte = "WITH c AS (SELECT Id FROM Users) SELECT * FROM c";
 
         var sql = DatabaseService.ApplyRowLimit(cte, 25);
