@@ -577,14 +577,29 @@ public class DatabaseService
             maxRows = _maxQueryRows;
         }
 
-        // Wrap query with TOP clause if it doesn't have one
+        return await ExecuteQueryInternalAsync(ApplyRowLimit(query, maxRows), null);
+    }
+
+    /// <summary>
+    /// Wraps a query with a TOP clause so it can't return more than <paramref name="maxRows"/> rows.
+    /// Queries that already carry their own TOP are left untouched.
+    /// </summary>
+    internal static string ApplyRowLimit(string query, int maxRows)
+    {
         var modifiedQuery = query.Trim();
-        if (!Regex.IsMatch(modifiedQuery, @"^\s*SELECT\s+TOP\s+\d+", RegexOptions.IgnoreCase))
+
+        // T-SQL grammar is SELECT [DISTINCT] [TOP n], so TOP has to go *after* any DISTINCT —
+        // injecting it before makes SQL Server reject the query outright.
+        if (!Regex.IsMatch(modifiedQuery, @"^\s*SELECT\s+(DISTINCT\s+)?TOP\s+\d+", RegexOptions.IgnoreCase))
         {
-            modifiedQuery = Regex.Replace(modifiedQuery, @"^\s*SELECT\s+", $"SELECT TOP {maxRows} ", RegexOptions.IgnoreCase);
+            modifiedQuery = Regex.Replace(
+                modifiedQuery,
+                @"^\s*SELECT\s+(DISTINCT\s+)?",
+                m => $"SELECT {m.Groups[1].Value}TOP {maxRows} ",
+                RegexOptions.IgnoreCase);
         }
 
-        return await ExecuteQueryInternalAsync(modifiedQuery, null);
+        return modifiedQuery;
     }
 
     private async Task<QueryResult> ExecuteQueryInternalAsync(string sql, Dictionary<string, object>? parameters)
