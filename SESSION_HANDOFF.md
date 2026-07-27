@@ -2,6 +2,22 @@
 
 Latest first. Read this and `TODO.md` at the start of each session to catch up.
 
+## 2026-07-27 — Wired duetGPT knowledge sync
+
+ContextBoard's **card** sync had been working all along (project 12, cards 524–528 / 726 / 1093), but
+the **knowledge** sync to duetGPT's RAG corpus had never run for this repo. The two hooks resolve
+config differently: `sync-files.ps1` falls back to the global `~/.contextboard.json` and derives the
+project from the folder name, while `sync-knowledge.ps1` reads `token` *and* `project` from a
+**repo-local** `.contextboard.json` only — with none here, it exited 0 silently every session.
+
+Added that file (gitignored — it carries a bearer token). First run ingested 11 items: `README.md`,
+`TODO.md`, `SESSION_HANDOFF.md`, `DOCS/DONE.md` plus all 7 cards, keyed `cb:12:doc:*` / `cb:12:card:*`
+in duetGPT category `cb:mcpsql`. Verified by querying the knowledge base back. It now runs on every
+Stop hook, pushing only changed items.
+
+Open follow-up: the token in that file is the **board-wide** one (same value as `~/.contextboard.json`).
+A project-scoped `mcpsql` agent token, minted in the board's Agents page, would be tighter.
+
 ## 2026-07-26 — Backlog sweep: tests, three bug fixes, CI
 
 **What was done:** worked the board from P1 down. Five PRs, all merged to `master` (now `0b6def5`).
