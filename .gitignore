@@ -368,3 +368,6 @@ appsettings.*.json
 
 # Claude agent-local memory (never commit; see global memory policy)
 .claude/agent-memory/
+
+# ContextBoard sync config — carries a bearer token
+.contextboard.json
