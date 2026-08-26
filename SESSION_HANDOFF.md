@@ -2,6 +2,19 @@
 
 Latest first. Read this and `TODO.md` at the start of each session to catch up.
 
+## 2026-08-26 — net10.0, repo relocated, stale branch landed
+
+- **PR #12** landed `chore/migrate-multiserver-todo`, which had drifted 22 commits behind master with
+  no upstream. Rebased; the only conflict was `TODO.md` (branch edited the pre-PR-#5 format). Resolved
+  by re-adding its two items as proper cards: **SRV-001** (ID 1416, make the connected server
+  unambiguous on every response — P1, MUST) and **SRV-002** (ID 1417, prod safety rails).
+- **Target framework is now net10.0** for both projects; 59 tests green.
+- **Repo moved** from `C:\Projects\mcpsql\mcpsql` up to `C:\Projects\mcpsql`. Sessions launch from the
+  parent, so the git root had been one level below the cwd and `sync-files.ps1` never found `TODO.md`
+  (same failure duetGPT had). The `mcpsql` MCP entry in `~/.claude.json` now points at
+  `mcpsql\bin\Debug\net10.0\win-x64\mcpsql.exe`.
+- Git push from Claude's non-interactive shell needs `-c credential.helper='!gh auth git-credential'`.
+
 ## 2026-07-27 — Wired duetGPT knowledge sync
 
 ContextBoard's **card** sync had been working all along (project 12, cards 524–528 / 726 / 1093), but

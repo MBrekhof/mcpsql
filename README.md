@@ -11,7 +11,7 @@ A read-only [Model Context Protocol](https://modelcontextprotocol.io) (MCP) serv
 
 ## Requirements
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - A reachable Microsoft SQL Server instance
 
 ## Setup

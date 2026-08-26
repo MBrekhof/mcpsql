@@ -20,7 +20,7 @@ A Model Context Protocol (MCP) server for SQL Server. It speaks JSON-RPC 2.0 ove
 
 - Build: `dotnet build`
 - Run: `dotnet run` (starts the server on stdio — it waits for JSON-RPC input, so it won't "do" anything when run bare)
-- .NET 8.0, win-x64, published as self-contained single-file with ReadyToRun.
+- .NET 10.0, win-x64, published as self-contained single-file with ReadyToRun.
 
 ## Critical gotchas
 
