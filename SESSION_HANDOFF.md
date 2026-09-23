@@ -2,6 +2,24 @@
 
 Latest first. Read this and `TODO.md` at the start of each session to catch up.
 
+## 2026-09-23 — Remove startup connectivity test
+
+Removed the connection probe and its fatal-exit path from `mcpsql/Program.cs`.
+Configuration still loads at startup; database operations open connections on demand.
+Updated `CLAUDE.md` to reflect this behavior. Work is on
+`fix/skip-startup-connectivity`.
+
+Verification: build succeeded with no warnings or errors; all 59 tests passed.
+Before the change, an isolated configuration pointing at an unreachable SQL endpoint
+exited 1 without answering initialize. Afterward, initialize, tools/list,
+list_databases, and use_database succeeded; execute_query returned a tool error,
+then ping succeeded and stdin EOF exited 0. Checked the server logs.
+The existing configured SQL Server was also unreachable, so a successful live query
+could not be verified. No database service was started.
+
+Reviewed `TODO.md`: SEC-001 remains the only open item, still awaiting its design
+decision; no task status changed.
+
 ## 2026-07-27 — Wired duetGPT knowledge sync
 
 ContextBoard's **card** sync had been working all along (project 12, cards 524–528 / 726 / 1093), but
