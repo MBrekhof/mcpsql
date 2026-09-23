@@ -17,8 +17,24 @@ then ping succeeded and stdin EOF exited 0. Checked the server logs.
 The existing configured SQL Server was also unreachable, so a successful live query
 could not be verified. No database service was started.
 
-Reviewed `TODO.md`: SEC-001 remains the only open item, still awaiting its design
-decision; no task status changed.
+After fetching current master, `TODO.md` also includes SRV-001 and SRV-002 alongside
+SEC-001; no task status changed. Preserved the .NET 10 changes from master.
+Repeated Release validation on .NET 10: 59 tests passed and the offline startup,
+database listing, query-error, and subsequent ping smoke test passed. Build reported
+CA2024 on the unchanged `McpServer.cs` EndOfStream check.
+
+## 2026-08-26 — net10.0, repo relocated, stale branch landed
+
+- **PR #12** landed `chore/migrate-multiserver-todo`, which had drifted 22 commits behind master with
+  no upstream. Rebased; the only conflict was `TODO.md` (branch edited the pre-PR-#5 format). Resolved
+  by re-adding its two items as proper cards: **SRV-001** (ID 1416, make the connected server
+  unambiguous on every response — P1, MUST) and **SRV-002** (ID 1417, prod safety rails).
+- **Target framework is now net10.0** for both projects; 59 tests green.
+- **Repo moved** from `C:\Projects\mcpsql\mcpsql` up to `C:\Projects\mcpsql`. Sessions launch from the
+  parent, so the git root had been one level below the cwd and `sync-files.ps1` never found `TODO.md`
+  (same failure duetGPT had). The `mcpsql` MCP entry in `~/.claude.json` now points at
+  `mcpsql\bin\Debug\net10.0\win-x64\mcpsql.exe`.
+- Git push from Claude's non-interactive shell needs `-c credential.helper='!gh auth git-credential'`.
 
 ## 2026-07-27 — Wired duetGPT knowledge sync
 

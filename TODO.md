@@ -2,6 +2,24 @@
 
 Open work for mcpsql. Completed items move to `DOCS/DONE.md`.
 
+## P1: High
+
+#### SRV-001: Make the connected server unambiguous on every response (ID: 1416)
+
+**(MUST)** The active-DB-name prefix isn't enough to tell prod from test (incident 2026-06-04: agent
+queried test thinking it was prod). Add to `get_database_info` (`DatabaseService.GetDatabaseInfoAsync`
++ the `DatabaseInfo` model): `@@SERVERNAME` (host), `SUSER_SNAME()` (login), the configured connection
+key in use, and an explicit `Environment` label (`PRODUCTION` | `TEST` | `UNKNOWN`). Echo a compact
+origin tag (e.g. `[PRD-SQL-009/Labware as LWPRDRO]`) on **every** tool result, not just
+`get_database_info`, and log the resolved server/db/login to the file logger at startup.
+
+#### SRV-002: Prod safety rails (ID: 1417)
+
+Mark each configured connection with an explicit `environment` in config (don't infer from DB name);
+surface it in every response. Keep the read-only guarantee intact; if write support is ever added it
+must be off for Production unless explicitly enabled per call. Consider a visible warning in responses
+when the target is Production. Builds on SRV-001.
+
 ## P3: Low
 
 #### SEC-001: Column-level allow/deny lists per connection (ID: 527)
@@ -29,4 +47,3 @@ Options, in order of preference:
   gives false assurance.
 - c) **Parse with ScriptDom** and reject queries referencing denied columns. Real enforcement, new
   dependency, heavy — and still leaks through a view that aliases the column.
-
