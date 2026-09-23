@@ -2,6 +2,27 @@
 
 Latest first. Read this and `TODO.md` at the start of each session to catch up.
 
+## 2026-09-23 — Remove startup connectivity test
+
+Removed the connection probe and its fatal-exit path from `mcpsql/Program.cs`.
+Configuration still loads at startup; database operations open connections on demand.
+Updated `CLAUDE.md` to reflect this behavior. Work is on
+`fix/skip-startup-connectivity`.
+
+Verification: build succeeded with no warnings or errors; all 59 tests passed.
+Before the change, an isolated configuration pointing at an unreachable SQL endpoint
+exited 1 without answering initialize. Afterward, initialize, tools/list,
+list_databases, and use_database succeeded; execute_query returned a tool error,
+then ping succeeded and stdin EOF exited 0. Checked the server logs.
+The existing configured SQL Server was also unreachable, so a successful live query
+could not be verified. No database service was started.
+
+After fetching current master, `TODO.md` also includes SRV-001 and SRV-002 alongside
+SEC-001; no task status changed. Preserved the .NET 10 changes from master.
+Repeated Release validation on .NET 10: 59 tests passed and the offline startup,
+database listing, query-error, and subsequent ping smoke test passed. Build reported
+CA2024 on the unchanged `McpServer.cs` EndOfStream check.
+
 ## 2026-08-26 — net10.0, repo relocated, stale branch landed
 
 - **PR #12** landed `chore/migrate-multiserver-todo`, which had drifted 22 commits behind master with
